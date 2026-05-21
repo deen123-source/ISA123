@@ -1,0 +1,469 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISA Esport Tournament Bracket</title>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      oklch(99% 0.005 145);
+            --surface: oklch(100% 0 0);
+            --fg:      oklch(15% 0.02 145);
+            --muted:   oklch(55% 0.02 145);
+            --border:  oklch(90% 0.02 145);
+            --accent:  oklch(68% 0.23 145);
+            
+            --font-display: 'Inter', 'Kanit', sans-serif;
+            --font-body:    'Inter', 'Kanit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: var(--font-body);
+            background-image: 
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-attachment: fixed;
+            margin: 0;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+        }
+
+        .match-card {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            z-index: 10;
+        }
+
+        .team-slot {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+
+        .team-slot:last-child { border-bottom: none; }
+
+        .team-slot.winner {
+            background-color: var(--accent);
+            color: white;
+            font-weight: 700;
+        }
+
+        .team-slot.loser {
+            opacity: 0.5;
+            background-color: var(--bg);
+        }
+
+        .team-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #eee;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid var(--border);
+        }
+
+        .winner-logo {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: 6px solid var(--accent);
+            box-shadow: 0 0 40px var(--accent);
+            margin-bottom: 24px;
+            background: white;
+        }
+
+        .celebration-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleUp { from { transform: scale(0.8); } to { transform: scale(1); } }
+
+        .animate-scale { animation: scaleUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        /* Bracket lines */
+        .line-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .line {
+            fill: none;
+            stroke: var(--border);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+
+        .line.active {
+            stroke: var(--accent);
+            stroke-width: 4;
+            filter: drop-shadow(0 0 4px var(--accent));
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; }
+            .glass { background: white !important; border: 1px solid #eee !important; backdrop-filter: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [teams, setTeams] = useState([
+                { id: 1, name: "สิงห์คะนองนา", logo: "mpfk3fj8-image.png" },
+                { id: 2, name: "มังกรทอง FC", logo: "mpfk3fj8-image.png" },
+                { id: 3, name: "อินทรีเหล็ก Esports", logo: "mpfk3fj8-image.png" },
+                { id: 4, name: "หงส์แดง มหาอุด", logo: "mpfk3fj8-image.png" },
+                { id: 5, name: "ฉลามชล Gaming", logo: "mpfk3fj8-image.png" },
+                { id: 6, name: "พยัคฆ์ร้ายสายน้ำ", logo: "mpfk3fj8-image.png" },
+                { id: 7, name: "สายฟ้าแลบ", logo: "mpfk3fj8-image.png" },
+                { id: 8, name: "ยักษ์เขียว", logo: "mpfk3fj8-image.png" }
+            ]);
+            const [inputName, setInputName] = useState("");
+            const [inputLogo, setInputLogo] = useState(null);
+            const [bracket, setBracket] = useState(null);
+            const [mode, setMode] = useState('input');
+            const [settings, setSettings] = useState({
+                cardWidth: 240,
+                verticalGap: 60,
+                fontSize: 16
+            });
+            const [champion, setChampion] = useState(null);
+            const containerRef = useRef(null);
+            const [svgLines, setSvgLines] = useState([]);
+
+            const handleLogoChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => setInputLogo(reader.result);
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const addTeam = () => {
+                if (inputName.trim()) {
+                    setTeams([...teams, { 
+                        id: Date.now(), 
+                        name: inputName.trim(), 
+                        logo: inputLogo || "mpfk3fj8-image.png" 
+                    }]);
+                    setInputName("");
+                    setInputLogo(null);
+                }
+            };
+
+            const removeTeam = (id) => setTeams(teams.filter(t => t.id !== id));
+
+            const startTournament = () => {
+                if (teams.length < 2) return;
+                const shuffled = [...teams].sort(() => Math.random() - 0.5);
+                const size = Math.pow(2, Math.ceil(Math.log2(shuffled.length)));
+                const spots = new Array(size).fill(null);
+                shuffled.forEach((t, i) => spots[i] = t);
+
+                const rounds = [];
+                const r1 = [];
+                for (let i = 0; i < size; i += 2) {
+                    let t1 = slots[i], t2 = slots[i+1];
+                    let win = (t1 && !t2) ? t1 : (t2 && !t1) ? t2 : null;
+                    r1.push({ id: `r0-m${i/2}`, t1, t2, win });
+                }
+                rounds.push(r1);
+
+                let nextCount = size / 4;
+                while (nextCount >= 1) {
+                    let rd = [];
+                    for (let i = 0; i < nextCount; i++) rd.push({ id: `r${rounds.length}-m${i}`, t1: null, t2: null, win: null });
+                    rounds.push(rd);
+                    nextCount /= 2;
+                }
+
+                propagate(rounds);
+                setBracket(rounds);
+                setMode('bracket');
+                setChampion(null);
+            };
+
+            const propagate = (b) => {
+                for (let r = 0; r < b.length - 1; r++) {
+                    b[r].forEach((m, i) => {
+                        if (m.win) {
+                            let next = b[r+1][Math.floor(i/2)];
+                            if (i % 2 === 0) next.t1 = m.win; else next.t2 = m.win;
+                        }
+                    });
+                }
+            };
+
+            const pickWinner = (rIdx, mIdx, team) => {
+                if (!team || !bracket) return;
+                const newB = JSON.parse(JSON.stringify(bracket));
+                const currentMatch = newB[rIdx][mIdx];
+                
+                // If clicking the same winner, just ignore or deselect? Let's just set.
+                currentMatch.win = team;
+
+                let r = rIdx + 1;
+                let m = Math.floor(mIdx/2);
+                let isT1 = (mIdx % 2 === 0);
+                let currentVal = team;
+
+                // Propagate forward
+                while (r < newB.length) {
+                    let target = newB[r][m];
+                    let oldId = isT1 ? (target.t1?.id) : (target.t2?.id);
+                    
+                    if (isT1) target.t1 = currentVal; else target.t2 = currentVal;
+                    
+                    // If the slot content actually changed, reset its winner
+                    if (oldId !== currentVal.id) {
+                        target.win = null;
+                    } else break; // No more changes needed
+
+                    isT1 = (m % 2 === 0);
+                    m = Math.floor(m/2);
+                    r++;
+                }
+
+                // If this was the final, set champion
+                if (rIdx === newB.length - 1) {
+                    setChampion(team);
+                }
+
+                setBracket(newB);
+            };
+
+            useEffect(() => {
+                if (mode === 'bracket') {
+                    const timer = setTimeout(drawLines, 300);
+                    window.addEventListener('resize', drawLines);
+                    return () => {
+                        clearTimeout(timer);
+                        window.removeEventListener('resize', drawLines);
+                    }
+                }
+            }, [bracket, mode, settings]);
+
+            const drawLines = () => {
+                if (!containerRef.current || !bracket) return;
+                const container = containerRef.current;
+                const rect = container.getBoundingClientRect();
+                const lines = [];
+
+                for (let r = 0; r < bracket.length - 1; r++) {
+                    for (let m = 0; m < bracket[r].length; m++) {
+                        const startEl = document.getElementById(`m-${r}-${m}`);
+                        const endEl = document.getElementById(`m-${r+1}-${Math.floor(m/2)}`);
+                        if (startEl && endEl) {
+                            const s = startEl.getBoundingClientRect();
+                            const e = endEl.getBoundingClientRect();
+                            const x1 = s.right - rect.left;
+                            const y1 = s.top + s.height/2 - rect.top;
+                            const x2 = e.left - rect.left;
+                            const y2 = e.top + e.height/2 - rect.top;
+                            const midX = x1 + (x2 - x1) / 2;
+                            lines.push({ 
+                                d: `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`,
+                                active: bracket[r][m].win !== null
+                            });
+                        }
+                    }
+                }
+                setSvgLines(lines);
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col items-center py-10 px-6">
+                    {/* CHAMPION CELEBRATION OVERLAY */}
+                    {champion && (
+                        <div className="celebration-overlay" onClick={() => setChampion(null)}>
+                            <div className="text-center animate-scale p-12 glass rounded-[3rem] text-slate-900 border-4 border-[oklch(68%_0.23_145)] shadow-[0_0_100px_rgba(34,197,94,0.3)]">
+                                <h4 className="text-xl font-black uppercase tracking-[0.5em] text-[oklch(68%_0.23_145)] mb-6">WINNER / CHAMPION</h4>
+                                <img src={champion.logo} className="winner-logo mx-auto" alt="Champion Logo" />
+                                <h2 className="text-7xl font-black mb-8 tracking-tighter">{champion.name}</h2>
+                                <button className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xl hover:scale-105 transition-transform">ยอรับ</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Branding Header */}
+                    <header className="flex flex-col items-center mb-16 text-center animate-fade-in no-print">
+                        <img src="mpfk3fj8-image.png" alt="ISA Logo" className="h-32 w-auto mb-6 drop-shadow-2xl" />
+                        <h1 className="text-7xl font-black tracking-tighter text-slate-900 uppercase">
+                            ISA <span className="text-[oklch(68%_0.23_145)]">ESPORT</span>
+                        </h1>
+                        <p className="text-slate-500 font-bold uppercase tracking-[0.4em] text-xs mt-2">
+                            Islamsriayuttha Foundation School
+                        </p>
+                    </header>
+
+                    {mode === 'input' ? (
+                        <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-12">
+                            {/* Input Column */}
+                            <div className="glass p-10 rounded-[2.5rem] shadow-2xl">
+                                <h2 className="text-3xl font-black mb-8 flex items-center gap-4">
+                                    <span className="w-2.5 h-10 bg-[oklch(68%_0.23_145)] rounded-full"></span>
+                                    ข้อมูลทีม
+                                </h2>
+                                <div className="space-y-6">
+                                    <div className="flex flex-col gap-3">
+                                        <label className="text-sm font-black text-slate-400 uppercase tracking-widest">ชื่อทีม</label>
+                                        <input 
+                                            className="bg-white border-2 border-border p-5 rounded-2xl font-bold focus:border-[oklch(68%_0.23_145)] outline-none transition-all text-xl shadow-inner"
+                                            value={inputName}
+                                            onChange={e => setInputName(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && addTeam()}
+                                            placeholder="ใส่ชื่อทีมที่นี่..."
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-3">
+                                        <label className="text-sm font-black text-slate-400 uppercase tracking-widest">โลโก้ทีม</label>
+                                        <div className="flex items-center gap-6 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-border">
+                                            <div className="w-24 h-24 bg-white rounded-2xl border-2 border-border flex items-center justify-center overflow-hidden shadow-sm">
+                                                {inputLogo ? <img src={inputLogo} className="w-full h-full object-cover" /> : <div className="text-slate-200"><svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><polyline points="16 5 21 5 21 10"/><line x1="12" y1="12" x2="21" y2="3"/></svg></div>}
+                                            </div>
+                                            <div className="flex-1">
+                                                <input type="file" id="logo-input" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                                                <label htmlFor="logo-input" className="cursor-pointer bg-white border-2 border-border px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors inline-block mb-2">อัปโหลดรูปภาพ</label>
+                                                <p className="text-[10px] text-slate-400">ถ้าไม่ได้ใส่ จะใช้โลโก้โรงเรียนแทน</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition-all mt-6 text-xl shadow-xl active:scale-95"
+                                        onClick={addTeam}
+                                    >
+                                        เพิ่มทีมเข้าร่วม
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* List Column */}
+                            <div className="glass p-10 rounded-[2.5rem] shadow-2xl flex flex-col">
+                                <div className="flex items-center justify-between mb-8">
+                                    <h2 className="text-3xl font-black">ทีมทั้งหมด ({teams.length})</h2>
+                                    <button onClick={() => setTeams([])} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors">ล้างทั้งหมด</button>
+                                </div>
+                                <div className="flex-1 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar space-y-3">
+                                    {teams.map(t => (
+                                        <div key={t.id} className="bg-white p-4 rounded-2xl border-2 border-slate-100 flex items-center justify-between group hover:border-[oklch(68%_0.23_145)] transition-colors shadow-sm">
+                                            <div className="flex items-center gap-4">
+                                                <img src={t.logo} className="w-12 h-12 rounded-xl border-2 border-border object-cover bg-slate-50" />
+                                                <span className="font-black text-slate-700 text-lg">{t.name}</span>
+                                            </div>
+                                            <button onClick={() => removeTeam(t.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-2">
+                                                <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {teams.length === 0 && (
+                                        <div className="text-center py-20 text-slate-300 font-bold italic">ยังไม่ได้เพิ่มทีมลงในรายการ</div>
+                                    )}
+                                </div>
+                                <button 
+                                    className="w-full py-6 bg-[oklch(68%_0.23_145)] text-white font-black rounded-3xl text-2xl shadow-xl shadow-[rgba(34,197,94,0.3)] mt-8 disabled:opacity-20 active:scale-95 transition-all"
+                                    onClick={startTournament}
+                                    disabled={teams.length < 2}
+                                >
+                                    เริ่มสร้างสายการแข่งขัน
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="w-full flex flex-col items-center">
+                            {/* SETTINGS TOOLBAR */}
+                            <div className="w-full max-w-[1200px] glass p-6 rounded-3xl mb-12 flex flex-wrap gap-10 items-center justify-between no-print shadow-xl">
+                                <div className="flex gap-4">
+                                    <button onClick={() => setMode('input')} className="px-8 py-3 bg-white border-2 border-border rounded-xl font-black text-sm hover:bg-slate-50 transition-colors flex items-center gap-2">
+                                        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg>
+                                        กลับไปแก้ไข
+                                    </button>
+                                    <button onClick={() => window.print()} className="px-8 py-3 bg-white border-2 border-border rounded-xl font-black text-sm hover:bg-slate-50 transition-colors flex items-center gap-2">
+                                        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                                        พิมพ์เป็น PDF
+                                    </button>
+                                </div>
+                                
+                                <div className="flex gap-10 items-center text-[10px] font-black text-slate-400 uppercase tracking-widest flex-1 justify-end">
+                                    <div className="flex flex-col gap-2 w-32">
+                                        <div className="flex justify-between"><span>ขนาดห้อง:</span> <span className="text-[oklch(68%_0.23_145)]">{settings.cardWidth}px</span></div>
+                                        <input type="range" min="180" max="400" value={settings.cardWidth} onChange={e => setSettings({...settings, cardWidth: parseInt(e.target.value)})} className="accent-[oklch(68%_0.23_145)]" />
+                                    </div>
+                                    <div className="flex flex-col gap-2 w-32">
+                                        <div className="flex justify-between"><span>ระยะห่าง:</span> <span className="text-[oklch(68%_0.23_145)]">{settings.verticalGap}px</span></div>
+                                        <input type="range" min="20" max="180" value={settings.verticalGap} onChange={e => setSettings({...settings, verticalGap: parseInt(e.target.value)})} className="accent-[oklch(68%_0.23_145)]" />
+                                    </div>
+                                    <div className="flex flex-col gap-2 w-32">
+                                        <div className="flex justify-between"><span>ตัวอักษร:</span> <span className="text-[oklch(68%_0.23_145)]">{settings.fontSize}px</span></div>
+                                        <input type="range" min="12" max="28" value={settings.fontSize} onChange={e => setSettings({...settings, fontSize: parseInt(e.target.value)})} className="accent-[oklch(68%_0.23_145)]" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* BRACKET VISUALIZATION */}
+                            <div className="relative w-full overflow-x-auto pb-48 custom-scrollbar">
+                                <div ref={containerRef} className="relative flex gap-32 items-center justify-center min-w-max px-32">
+                                    <svg className="line-svg">
+                                        {svgLines.map((l, i) => <path key={i} d={l.d} className={`line ${l.active ? 'active' : ''}`} />)}
+                                    </svg>
+                                    
+                                    {bracket.map((round, rIdx) => (
+                                        <div key={rIdx} className="flex flex-col justify-around h-full py-20" style={{ gap: `${settings.verticalGap}px`, minHeight: '900px' }}>
+                                            <div className="text-center mb-6">
+                                                <h4 className="text-[11px] font-black text-[oklch(68%_0.23_145)] uppercase tracking-[0.5em] bg-white border border-[oklch(68%_0.23_145)]/20 px-4 py-1.5 rounded-full inline-block">
+                                                    {rIdx === bracket.length - 1 ? 'Championship' : `Round ${rIdx + 1}`}
+                                                </h4>
+                                            </div>
+                                            {round.map((m, mIdx) => (
+                                                <div key={m.id} id={`m-${rIdx}-${mIdx}`} className="match-card" style={{ width: `${settings.

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISA Esport Tournament Bracket</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --isa-green: #22c55e;
+            --isa-dark: #166534;
+            --bg-grid: #f8fafc;
+        }
+
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: var(--bg-grid);
+            background-image: 
+                linear-gradient(#e2e8f0 1px, transparent 1px),
+                linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+            background-size: 30px 30px;
+            margin: 0;
+            color: #1e293b;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #e2e8f0;
+        }
+
+        .match-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            width: 220px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+            z-index: 10;
+        }
+
+        .team-row {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            transition: 0.2s;
+            min-height: 48px;
+            align-items: center;
+        }
+
+        .team-row:last-child { border-bottom: none; }
+        .team-row:hover:not(.winner):not(.empty) { background-color: #f0fdf4; }
+        .team-row.winner { background-color: var(--isa-green); color: white; font-weight: bold; }
+        .team-row.loser { opacity: 0.5; background-color: #f8fafc; }
+        .team-row.empty { color: #94a3b8; font-style: italic; cursor: default; }
+
+        /* Bracket lines SVG container */
+        #bracket-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connector-path {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-width: 2;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="app" class="p-8 flex flex-col items-center">
+        <!-- Header -->
+        <header class="text-center mb-12 animate-pop">
+            <img src="mpfjeqwm-image.png" alt="ISA Logo" class="h-32 mx-auto mb-4 drop-shadow-md">
+            <h1 class="text-6xl font-black mb-2 tracking-tight">ISA <span class="text-green-500 underline decoration-8 underline-offset-8">ESPORT</span></h1>
+            <p class="text-slate-400 font-bold uppercase tracking-[0.3em] text-xs">Islamsriayuttha Foundation School</p>
+        </header>
+
+        <!-- View 1: Team Input -->
+        <div id="view-input" class="w-full max-w-lg glass p-10 rounded-[2.5rem] shadow-2xl animate-pop">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="w-2 h-8 bg-green-500 rounded-full"></span>
+                รายชื่อทีมเข้าแข่งขัน
+            </h2>
+            <div class="flex gap-3 mb-10">
+                <input id="team-input" class="flex-1 border-2 border-slate-200 p-4 rounded-2xl font-bold focus:border-green-500 outline-none text-lg" placeholder="ใส่ชื่อทีมที่นี่..." autocomplete="off">
+                <button id="btn-add" class="bg-green-500 text-white px-10 rounded-2xl font-black shadow-lg hover:bg-green-600 transition-colors">เพิ่ม</button>
+            </div>
+            <div id="team-list" class="grid grid-cols-1 gap-2 mb-10 max-h-60 overflow-y-auto pr-2">
+                <!-- Teams will appear here -->
+            </div>
+            <button id="btn-generate" class="w-full bg-slate-900 text-white py-6 rounded-3xl font-black text-2xl hover:bg-black transition-all shadow-xl disabled:opacity-30 disabled:cursor-not-allowed">สร้างตารางการแข่งขัน</button>
+        </div>
+
+        <!-- View 2: Bracket Display -->
+        <div id="view-bracket" class="w-full hidden animate-pop relative">
+            <div class="flex justify-between items-center mb-12 max-w-6xl mx-auto">
+                <button id="btn-back" class="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl font-bold hover:bg-slate-50 transition-colors">ย้อนกลับ</button>
+                <div class="bg-green-100 text-green-700 px-6 py-3 rounded-full text-xs font-black uppercase border border-green-200">คลิกที่ชื่อทีมเพื่อเลือกผู้ชนะ</div>
+                <button onclick="window.print()" class="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl font-bold hover:bg-slate-50 transition-colors">พิมพ์ / บันทึก PDF</button>
+            </div>
+            
+            <div class="relative overflow-x-auto pb-20">
+                <svg id="bracket-svg"></svg>
+                <div id="bracket-container" class="flex gap-24 px-10 items-center justify-center min-w-max">
+                    <!-- Rounds and matches will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            teams: ["มังกรทอง FC", "สิงห์คะนองนา", "อินทรีเหล็ก Esports", "ฉลามชล Gaming", "พยัคฆ์ร้ายสายน้ำ", "หงส์แดง มหาอุด"],
+            bracket: null
+        };
+
+        const inputEl = document.getElementById('team-input');
+        const listEl = document.getElementById('team-list');
+        const btnAdd = document.getElementById('btn-add');
+        const btnGenerate = document.getElementById('btn-generate');
+        const btnBack = document.getElementById('btn-back');
+        const viewInput = document.getElementById('view-input');
+        const viewBracket = document.getElementById('view-bracket');
+        const bracketContainer = document.getElementById('bracket-container');
+        const bracketSvg = document.getElementById('bracket-svg');
+
+        function renderTeamList() {
+            listEl.innerHTML = state.teams.map((t, i) => `
+                <div class="bg-white border p-4 rounded-xl flex justify-between shadow-sm animate-pop">
+                    <span class="font-bold">${i+1}. ${t}</span>
+                    <button onclick="removeTeam(${i})" class="text-slate-300 hover:text-red-500 font-bold transition-colors">ลบ</button>
+                </div>
+            `).join('');
+            btnGenerate.disabled = state.teams.length < 2;
+        }
+
+        function removeTeam(index) {
+            state.teams.splice(index, 1);
+            renderTeamList();
+        }
+
+        btnAdd.onclick = () => {
+            if (inputEl.value.trim()) {
+                state.teams.push(inputEl.value.trim());
+                inputEl.value = '';
+                renderTeamList();
+            }
+        };
+
+        inputEl.onkeydown = (e) => { if (e.key === 'Enter') btnAdd.click(); };
+
+        btnGenerate.onclick = () => {
+            const shuffled = [...state.teams].sort(() => Math.random() - 0.5);
+            const size = Math.pow(2, Math.ceil(Math.log2(shuffled.length)));
+            const slots = new Array(size).fill(null);
+            shuffled.forEach((t, i) => slots[i] = t);
+
+            let rounds = [];
+            let r1 = [];
+            for (let i = 0; i < size; i += 2) {
+                let t1 = slots[i], t2 = slots[i+1];
+                let win = (t1 && !t2) ? t1 : (t2 && !t1) ? t2 : null;
+                r1.push({ t1, t2, win });
+            }
+            rounds.push(r1);
+
+            let nextCount = size / 4;
+            while (nextCount >= 1) {
+                let rd = [];
+                for (let i = 0; i < nextCount; i++) rd.push({ t1: null, t2: null, win: null });
+                rounds.push(rd);
+                nextCount /= 2;
+            }
+
+            // Propagate byes
+            for (let r = 0; r < rounds.length - 1; r++) {
+                rounds[r].forEach((m, i) => {
+                    if (m.win) {
+                        let next = rounds[r+1][Math.floor(i/2)];
+                        if (i % 2 === 0) next.t1 = m.win; else next.t2 = m.win;
+                    }
+                });
+            }
+
+            state.bracket = rounds;
+            viewInput.classList.add('hidden');
+            viewBracket.classList.remove('hidden');
+            renderBracket();
+        };
+
+        btnBack.onclick = () => {
+            viewBracket.classList.add('hidden');
+            viewInput.classList.remove('hidden');
+        };
+
+        function renderBracket() {
+            bracketContainer.innerHTML = state.bracket.map((round, rIdx) => `
+                <div class="flex flex-col justify-around gap-12 h-full py-10">
+                    <div class="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                        ${rIdx === state.bracket.length - 1 ? 'Championship' : 'Round ' + (rIdx + 1)}
+                    </div>
+                    ${round.map((m, mIdx) => `
+                        <div id="match-${rIdx}-${mIdx}" class="match-card">
+                            <div class="team-row ${m.win === m.t1 && m.win ? 'winner' : m.win ? 'loser' : ''} ${!m.t1 ? 'empty' : ''}" 
+                                 onclick="pickWinner(${rIdx}, ${mIdx}, '${m.t1}')">
+                                <span class="truncate">${m.t1 || 'WAITING...'}</span>
+                            </div>
+                            <div class="team-row ${m.win === m.t2 && m.win ? 'winner' : m.win ? 'loser' : ''} ${!m.t2 ? 'empty' : ''}" 
+                                 onclick="pickWinner(${rIdx}, ${mIdx}, '${m.t2}')">
+                                <span class="truncate">${m.t2 || 'WAITING...'}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+            
+            // Wait for DOM to settle then draw lines
+            setTimeout(drawLines, 50);
+        }
+
+        function pickWinner(rIdx, mIdx, team) {
+            if (!team || team === 'null' || team === 'undefined' || team === 'WAITING...') return;
+            
+            let bracket = state.bracket;
+            bracket[rIdx][mIdx].win = team;
+            
+            let r = rIdx + 1, m = Math.floor(mIdx/2), isT1 = (mIdx % 2 === 0), val = team;
+            while (r < bracket.length) {
+                let target = bracket[r][m];
+                let old = isT1 ? target.t1 : target.t2;
+                if (isT1) target.t1 = val; else target.t2 = val;
+                if (old !== val) target.win = null;
+                isT1 = (m % 2 === 0); m = Math.floor(m/2); r++;
+            }
+            renderBracket();
+        }
+
+        function drawLines() {
+            bracketSvg.innerHTML = '';
+            const containerRect = bracketContainer.getBoundingClientRect();
+            bracketSvg.setAttribute('viewBox', `0 0 ${containerRect.width} ${containerRect.height}`);
+            
+            for (let r = 0; r < state.bracket.length - 1; r++) {
+                for (let m = 0; m < state.bracket[r].length; m++) {
+                    const startEl = document.getElementById(`match-${r}-${m}`);
+                    const nextMIdx = Math.floor(m / 2);
+                    const endEl = document.getElementById(`match-${r+1}-${nextMIdx}`);
+                    
+                    if (startEl && endEl) {
+                        const startRect = startEl.getBoundingClientRect();
+                        const endRect = endEl.getBoundingClientRect();
+                        
+                        const x1 = (startRect.right - containerRect.left);
+                        const y1 = (startRect.top + startRect.height/2 - containerRect.top);
+                        const x2 = (endRect.left - containerRect.left);
+                        const y2 = (endRect.top + endRect.height/2 - containerRect.top);
+                        const midX = x1 + (x2 - x1) / 2;
+                        
+                        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                        path.setAttribute('d', `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`);
+                        path.setAttribute('class', 'connector-path');
+                        bracketSvg.appendChild(path);
+                    }
+                }
+            }
+        }
+
+        window.onresize = drawLines;
+        renderTeamList();
+    </script>
+</body>
+</html>

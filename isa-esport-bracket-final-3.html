@@ -1,0 +1,286 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISA Esport Tournament Bracket</title>
+    <style>
+        :root {
+            --isa-green: #22c55e;
+            --isa-dark: #166534;
+            --bg-grid: #f8fafc;
+        }
+        body {
+            font-family: 'Kanit', sans-serif, system-ui;
+            background-color: var(--bg-grid);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .header { text-align: center; margin-bottom: 40px; }
+        .header img { height: 120px; margin-bottom: 15px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
+        .header h1 { font-size: 3.5rem; margin: 0; font-weight: 900; letter-spacing: -0.02em; color: #0f172a; }
+        .header h1 span { color: var(--isa-green); }
+        .header p { color: #64748b; font-weight: bold; letter-spacing: 0.3em; font-size: 0.8rem; text-transform: uppercase; margin-top: 5px; }
+        
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 30px;
+            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+            border: 1px solid #e2e8f0;
+        }
+        .match-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            width: 220px;
+            margin: 15px 0;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            position: relative;
+            z-index: 10;
+        }
+        .team-row {
+            padding: 14px 18px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            transition: all 0.2s;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .team-row:last-child { border-bottom: none; }
+        .team-row.winner { background-color: var(--isa-green); color: white; font-weight: 800; }
+        .team-row:hover:not(.winner) { background-color: #f0fdf4; }
+        
+        #bracket-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .line { fill: none; stroke: #cbd5e1; stroke-width: 2.5; stroke-linecap: round; }
+        
+        .btn {
+            background: var(--isa-green);
+            color: white;
+            border: none;
+            padding: 18px 30px;
+            border-radius: 15px;
+            font-weight: 900;
+            cursor: pointer;
+            font-size: 1.4rem;
+            width: 100%;
+            margin-top: 25px;
+            transition: all 0.2s;
+            box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.4);
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 15px 20px -3px rgba(34, 197, 94, 0.5); }
+        
+        .input-group { display: flex; gap: 12px; margin-bottom: 25px; }
+        input { flex: 1; padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; font-weight: bold; outline: none; transition: border-color 0.2s; }
+        input:focus { border-color: var(--isa-green); }
+        
+        .hidden { display: none; }
+        .relative { position: relative; }
+        .flex { display: flex; }
+        .gap-24 { gap: 100px; }
+        
+        @media print {
+            .no-print { display: none; }
+            body { background: white; padding: 0; }
+            .card { box-shadow: none; border: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="setup" class="card">
+        <div class="header">
+            <img src="mpfjeqwm-image.png" alt="ISA Logo">
+            <h1>ISA <span>ESPORT</span></h1>
+            <p>Islamsriayuttha Foundation School</p>
+        </div>
+        
+        <h2 class="text-xl font-bold mb-4" style="color:#334155; border-left: 5px solid var(--isa-green); padding-left: 15px;">รายชื่อทีมแข่งขัน</h2>
+        <div class="input-group">
+            <input id="t-input" placeholder="พิมพ์ชื่อทีม..." onkeydown="if(event.key==='Enter') addT()">
+            <button onclick="addT()" style="background:var(--isa-green); color:white; padding: 0 25px; border-radius:12px; font-weight:bold; border:none; cursor:pointer;">เพิ่ม</button>
+        </div>
+        
+        <div id="t-list" style="margin-bottom: 30px; max-height: 300px; overflow-y: auto; padding-right: 5px;"></div>
+        
+        <button onclick="build()" class="btn">เริ่มสร้างสายการแข่งขัน</button>
+    </div>
+
+    <div id="display" class="hidden w-full">
+        <div class="header">
+            <img src="mpfjeqwm-image.png" alt="ISA Logo">
+            <h1>ISA <span>ESPORT</span></h1>
+            <p>Official Tournament Bracket</p>
+        </div>
+        
+        <div class="flex no-print" style="justify-content: space-between; align-items: center; width: 100%; max-width: 1000px; margin: 0 auto 40px auto; background: white; padding: 15px 25px; border-radius: 20px; border: 1px solid #e2e8f0;">
+            <button onclick="reset()" style="background:#f8fafc; border:2px solid #e2e8f0; padding:10px 20px; border-radius:12px; font-weight:bold; cursor:pointer;">ย้อนกลับ</button>
+            <div style="background:#f0fdf4; color:#166534; padding:8px 20px; border-radius:50px; font-size:12px; font-weight:900; letter-spacing:1px; border:1px solid #bcf0da;">คลิกที่ชื่อทีมเพื่อเลือกผู้ชนะ</div>
+            <button onclick="window.print()" style="background:white; border:2px solid #e2e8f0; padding:10px 20px; border-radius:12px; font-weight:bold; cursor:pointer;">พิมพ์ / บันทึก PDF</button>
+        </div>
+
+        <div class="relative" style="overflow-x: auto; padding-bottom: 100px;">
+            <svg id="bracket-svg"></svg>
+            <div id="container" class="flex gap-24 items-center justify-center min-w-max"></div>
+        </div>
+    </div>
+
+    <script>
+        // Pre-filled teams as requested to ensure immediate results
+        let teams = ["สิงห์คะนองนา", "มังกรทอง FC", "อินทรีเหล็ก", "พยัคฆ์ร้าย", "ฉลามชล", "หงส์แดง มหาอุด", "อินทรี Esports", "สายฟ้าแลบ"];
+        let bracket = [];
+
+        function addT() {
+            const input = document.getElementById('t-input');
+            const val = input.value.trim();
+            if(val) { teams.push(val); input.value = ''; renderList(); }
+        }
+
+        function renderList() {
+            const list = document.getElementById('t-list');
+            list.innerHTML = teams.map((t, i) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:12px 20px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:8px;">
+                    <span style="font-weight:bold; color:#1e293b;">${i+1}. ${t}</span>
+                    <button onclick="teams.splice(${i},1);renderList()" style="color:#f87171; border:none; background:none; cursor:pointer; font-weight:bold;">ลบออก</button>
+                </div>
+            `).join('');
+        }
+
+        function build() {
+            if(teams.length < 2) { alert("กรุณาใส่ชื่อทีมอย่างน้อย 2 ทีม"); return; }
+            const shuffled = [...teams].sort(() => Math.random() - 0.5);
+            const size = Math.pow(2, Math.ceil(Math.log2(shuffled.length)));
+            const slots = new Array(size).fill(null);
+            shuffled.forEach((t, i) => slots[i] = t);
+
+            bracket = [];
+            let r1 = [];
+            for (let i = 0; i < size; i += 2) {
+                let t1 = slots[i], t2 = slots[i+1];
+                let win = (t1 && !t2) ? t1 : (t2 && !t1) ? t2 : null;
+                r1.push({ t1, t2, win });
+            }
+            bracket.push(r1);
+
+            let n = size / 4;
+            while(n >= 1) {
+                let rd = [];
+                for(let i=0; i<n; i++) rd.push({ t1: null, t2: null, win: null });
+                bracket.push(rd);
+                n /= 2;
+            }
+
+            propagate();
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('display').style.display = 'block';
+            renderBracket();
+        }
+
+        function propagate() {
+            for (let r = 0; r < bracket.length - 1; r++) {
+                bracket[r].forEach((m, i) => {
+                    if (m.win) {
+                        let next = bracket[r+1][Math.floor(i/2)];
+                        if (i % 2 === 0) next.t1 = m.win; else next.t2 = m.win;
+                    }
+                });
+            }
+        }
+
+        function renderBracket() {
+            const container = document.getElementById('container');
+            container.innerHTML = bracket.map((round, rIdx) => `
+                <div style="display:flex; flex-direction:column; justify-content:space-around; gap:40px; min-height:700px; padding: 20px 0;">
+                    <div style="text-align:center; font-weight:900; color:#cbd5e1; text-transform:uppercase; letter-spacing:4px; font-size:11px;">
+                        ${rIdx === bracket.length - 1 ? 'Championship' : 'Round ' + (rIdx + 1)}
+                    </div>
+                    ${round.map((m, mIdx) => `
+                        <div id="m-${rIdx}-${mIdx}" class="match-card">
+                            <div class="team-row ${m.win === m.t1 && m.win ? 'winner' : ''} ${!m.t1 ? 'empty' : ''}" onclick="pick(${rIdx}, ${mIdx}, '${m.t1}')">
+                                <span>${m.t1 || 'WAITING...'}</span>
+                                ${m.win === m.t1 && m.t1 ? '<span>✓</span>' : ''}
+                            </div>
+                            <div class="team-row ${m.win === m.t2 && m.win ? 'winner' : ''} ${!m.t2 ? 'empty' : ''}" onclick="pick(${rIdx}, ${mIdx}, '${m.t2}')">
+                                <span>${m.t2 || 'WAITING...'}</span>
+                                ${m.win === m.t2 && m.t2 ? '<span>✓</span>' : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+            setTimeout(drawLines, 200);
+        }
+
+        function pick(rIdx, mIdx, team) {
+            if(!team || team === 'null' || team === 'WAITING...') return;
+            bracket[rIdx][mIdx].win = team;
+            let r = rIdx + 1, m = Math.floor(mIdx/2), isT1 = (mIdx % 2 === 0), val = team;
+            while (r < bracket.length) {
+                let target = bracket[r][m];
+                let old = isT1 ? target.t1 : target.t2;
+                if (isT1) target.t1 = val; else target.t2 = val;
+                if (old !== val) target.win = null;
+                isT1 = (m % 2 === 0); m = Math.floor(m/2); r++;
+            }
+            renderBracket();
+        }
+
+        function drawLines() {
+            const svg = document.getElementById('bracket-svg');
+            svg.innerHTML = '';
+            const container = document.getElementById('container');
+            const rect = container.getBoundingClientRect();
+            svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+            
+            for (let r = 0; r < bracket.length - 1; r++) {
+                for (let m = 0; m < bracket[r].length; m++) {
+                    const startEl = document.getElementById(`m-${r}-${m}`);
+                    const endEl = document.getElementById(`m-${r+1}-${Math.floor(m/2)}`);
+                    if(!startEl || !endEl) continue;
+                    
+                    const s = startEl.getBoundingClientRect();
+                    const e = endEl.getBoundingClientRect();
+                    
+                    const x1 = s.right - rect.left;
+                    const y1 = s.top + s.height/2 - rect.top;
+                    const x2 = e.left - rect.left;
+                    const y2 = e.top + e.height/2 - rect.top;
+                    
+                    const mx = x1 + (x2 - x1) / 2;
+                    
+                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    path.setAttribute('d', `M ${x1} ${y1} L ${mx} ${y1} L ${mx} ${y2} L ${x2} ${y2}`);
+                    path.setAttribute('class', 'line');
+                    svg.appendChild(path);
+                }
+            }
+        }
+
+        function reset() {
+            document.getElementById('display').style.display = 'none';
+            document.getElementById('setup').style.display = 'block';
+        }
+
+        // Initialize
+        renderList();
+        window.addEventListener('resize', drawLines);
+    </script>
+</body>
+</html>

@@ -1,0 +1,602 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISA Esport Bracket Generator</title>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --isa-green: #22c55e;
+            --isa-dark: #166534;
+            --isa-white: #ffffff;
+            --bg-grid: #f8fafc;
+        }
+
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background-color: var(--bg-grid);
+            background-image: 
+                linear-gradient(#e2e8f0 1px, transparent 1px),
+                linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .bracket-node {
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .match-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            width: 240px;
+        }
+
+        .team-row {
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .team-row:last-child {
+            border-bottom: none;
+        }
+
+        .team-row:hover:not(.winner) {
+            background-color: #f0fdf4;
+        }
+
+        .team-row.winner {
+            background-color: var(--isa-green);
+            color: white;
+        }
+
+        .team-row.loser {
+            opacity: 0.5;
+            background-color: #f8fafc;
+        }
+
+        /* Connector Lines */
+        .connector {
+            position: absolute;
+            border-color: #cbd5e1;
+            border-style: solid;
+            pointer-events: none;
+        }
+
+        .connector-horizontal {
+            border-top-width: 2px;
+            width: 40px;
+            right: -42px;
+            top: 50%;
+        }
+
+        .connector-vertical {
+            border-left-width: 2px;
+            height: 100%;
+            right: -42px;
+            top: 50%;
+        }
+
+        .connector-join {
+            border-top-width: 2px;
+            width: 20px;
+            right: -62px;
+            top: 50%;
+        }
+
+        .animate-pop {
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.95); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [teams, setTeams] = useState(["Team A", "Team B", "Team C", "Team D"]);
+            const [inputValue, setInputValue] = useState("");
+            const [bracket, setBracket] = useState(null);
+            const [mode, setMode] = useState('input'); // 'input' or 'bracket'
+
+            const addTeam = () => {
+                if (inputValue.trim()) {
+                    setTeams([...teams, inputValue.trim()]);
+                    setInputValue("");
+                }
+            };
+
+            const generateBracket = () => {
+                if (teams.length < 2) return;
+                
+                // Shuffle teams
+                const shuffled = [...teams].sort(() => Math.random() - 0.5);
+                const n = shuffled.length;
+                const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(n)));
+                
+                // Initialize Rounds
+                const rounds = [];
+                
+                // Round 1 (Seed Round)
+                const r1Matches = [];
+                for (let i = 0; i < nextPowerOfTwo; i += 2) {
+                    const t1 = shuffled[i] || null;
+                    const t2 = shuffled[i+1] || null;
+                    
+                    // Auto-advance byes
+                    let winner = null;
+                    if (t1 && !t2) winner = t1;
+                    if (!t1 && t2) winner = t2;
+
+                    r1Matches.push({ id: `r0-m${i/2}`, team1: t1, team2: t2, winner });
+                }
+                rounds.push(r1Matches);
+
+                // Build subsequent rounds
+                let matchCount = nextPowerOfTwo / 4;
+                let rIdx = 1;
+                while (matchCount >= 1) {
+                    const round = [];
+                    for (let i = 0; i < matchCount; i++) {
+                        round.push({ id: `r${rIdx}-m${i}`, team1: null, team2: null, winner: null });
+                    }
+                    rounds.push(round);
+                    matchCount /= 2;
+                    rIdx++;
+                }
+
+                // Propagate Initial Winners (Byes)
+                propagate(rounds);
+                setBracket(rounds);
+                setMode('bracket');
+            };
+
+            const propagate = (currentBracket) => {
+                for (let r = 0; r < currentBracket.length - 1; r++) {
+                    const currentRound = currentBracket[r];
+                    const nextRound = currentBracket[r+1];
+                    
+                    currentRound.forEach((match, mIdx) => {
+                        if (match.winner) {
+                            const nextMIdx = Math.floor(mIdx / 2);
+                            const isSlot1 = mIdx % 2 === 0;
+                            if (isSlot1) nextRound[nextMIdx].team1 = match.winner;
+                            else nextRound[nextMIdx].team2 = match.winner;
+                        }
+                    });
+                }
+            };
+
+            const selectWinner = (rIdx, mIdx, winner) => {
+                if (!winner) return;
+                const newBracket = JSON.parse(JSON.stringify(bracket));
+                const match = newBracket[rIdx][mIdx];
+                
+                // Set winner
+                match.winner = winner;
+
+                // Clear downstream if winner changed
+                let currentR = rIdx + 1;
+                let currentM = Math.floor(mIdx / 2);
+                let isSlot1 = mIdx % 2 === 0;
+                let valueToPropagate = winner;
+
+                while (currentR < newBracket.length) {
+                    const nextMatch = newBracket[currentR][currentM];
+                    const oldVal = isSlot1 ? nextMatch.team1 : nextMatch.team2;
+                    
+                    if (isSlot1) nextMatch.team1 = valueToPropagate;
+                    else nextMatch.team2 = valueToPropagate;
+
+                    // If the slot value changed, we must clear the winner of this match 
+                    // and stop propagation of the old winner
+                    if (oldVal !== valueToPropagate) {
+                        nextMatch.winner = null;
+                    }
+                    
+                    // Move to next round
+                    const prevM = currentM;
+                    currentM = Math.floor(currentM / 2);
+                    isSlot1 = prevM % 2 === 0;
+                    currentR++;
+                }
+
+                setBracket(newBracket);
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
+                    {/* Brand Header */}
+                    <div className="text-center mb-12 animate-pop">
+                        <h1 className="text-5xl font-black text-slate-900 tracking-tight mb-2">
+                            ISA <span className="text-green-500 underline decoration-4 underline-offset-8">ESPORT</span>
+                        </h1>
+                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">
+                            Islamsriayuttha Foundation School
+                        </p>
+                    </div>
+
+                    {mode === 'input' ? (
+                        <div className="w-full max-w-2xl glass rounded-3xl p-8 shadow-2xl animate-pop">
+                            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+                                <span className="p-2 bg-green-500 rounded-lg text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+                                </span>
+                                จัดการรายชื่อทีม
+                            </h2>
+                            
+                            <div className="flex gap-2 mb-8">
+                                <input 
+                                    type="text" 
+                                    className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-green-500 outline-none transition-all"
+                                    placeholder="ใส่ชื่อทีมที่นี่..."
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && addTeam()}
+                                />
+                                <button 
+                                    onClick={addTeam}
+                                    className="bg-green-500 hover:bg-green-600 text-white font-black px-6 py-3 rounded-xl shadow-lg shadow-green-200 transition-all active:scale-95"
+                                >
+                                    เพิ่มทีม
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 max-h-60 overflow-y-auto pr-2">
+                                {teams.map((t, i) => (
+                                    <div key={i} className="bg-white border-2 border-slate-100 p-3 rounded-xl flex justify-between items-center group">
+                                        <span className="font-bold text-slate-700">{i+1}. {t}</span>
+                                        <button 
+                                            onClick={() => setTeams(teams.filter((_, idx) => idx !== i))}
+                                            className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button 
+                                onClick={generateBracket}
+                                disabled={teams.length < 2}
+                                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl text-xl shadow-xl hover:bg-black transition-all disabled:opacity-30 flex items-center justify-center gap-3"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-5c1.62-2.2 5-3 5-3"/><path d="M12 15v5s3.03-.55 5-2c2.2-1.62 3-5 3-5"/></svg>
+                                เริ่มสุ่มสายการแข่งขัน
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="w-full animate-pop">
+                            <div className="flex justify-between items-center mb-12 w-full max-w-7xl mx-auto px-4">
+                                <button 
+                                    onClick={() => setMode('input')}
+                                    className="bg-white border-2 border-slate-200 px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                                    แก้ไขรายชื่อ
+                                </button>
+                                <div className="bg-green-100 text-green-700 px-4 py-2 rounded-full text-xs font-black uppercase tracking-tighter">
+                                    คลิกที่ชื่อทีมเพื่อเลือกผู้ชนะ
+                                </div>
+                            </div>
+
+                            <div className="overflow-x-auto pb-20 pt-10">
+                                <div className="flex gap-16 px-10 items-center justify-center min-w-max">
+                                    {bracket.map((round, rIdx) => (
+                                        <div key={rIdx} className="flex flex-col justify-around gap-12 h-full">
+                                            <h3 className="text-center font-black text-slate-400 uppercase text-xs tracking-widest mb-4">
+                                                {rIdx === bracket.length - 1 ? 'ชิงชนะเลิศ' : `รอบที่ ${rIdx + 1}`}
+                                            </h3>
+                                            {round.map((match, mIdx) => (
+                                                <div key={match.id} className="bracket-node">I have completed the full implementation of the **ISA Esport Tournament Bracket**. 
+
+This version includes:
+1.  **Team Management**: Add up to 32 teams with real-time list management.
+2.  **Smart Randomization**: Automatically shuffles and pairs teams, handling byes for any number of teams.
+3.  **Interactive Bracket**: A "Single Elimination" visual flow (สายใย) where you can select winners by clicking their names.
+4.  **Propagation Logic**: Winners automatically flow to the next round while maintaining consistency if you change your mind.
+5.  **ISA Brand Theme**: A polished Green-and-White "Tech/Utility" aesthetic with smooth transitions and a responsive desktop layout.
+
+<artifact identifier="isa-esport-bracket" type="text/html" title="ISA Esport Tournament Bracket">
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISA Esport Tournament Bracket</title>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Kanit (for Thai) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Kanit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      oklch(99% 0.005 145);
+            --surface: oklch(100% 0 0);
+            --fg:      oklch(15% 0.02 145);
+            --muted:   oklch(55% 0.02 145);
+            --border:  oklch(90% 0.02 145);
+            --accent:  oklch(68% 0.23 145); /* Vibrant ISA Green */
+            
+            --font-display: 'Inter', 'Kanit', -apple-system, system-ui, sans-serif;
+            --font-body:    'Inter', 'Kanit', -apple-system, system-ui, sans-serif;
+            --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: var(--font-body);
+            background-image: 
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 30px 30px;
+            background-attachment: fixed;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+        }
+
+        .team-node {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            z-index: 10;
+        }
+
+        .team-node:hover:not(.winner):not(.empty) {
+            border-color: var(--accent);
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .team-node.winner {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            box-shadow: 0 0 20px color-mix(in oklch, var(--accent), transparent 40%);
+        }
+
+        .team-node.empty {
+            opacity: 0.4;
+            border-style: dashed;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0px color-mix(in oklch, var(--accent), black 20%);
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.05);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0px color-mix(in oklch, var(--accent), black 20%);
+        }
+
+        .btn-primary:active {
+            transform: translateY(2px);
+            box-shadow: 0 0px 0px color-mix(in oklch, var(--accent), black 20%);
+        }
+
+        .connector-line {
+            position: absolute;
+            background: var(--border);
+            z-index: 1;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 5px;
+            border: 2px solid var(--bg);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--muted);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .animate-slide-in {
+            animation: slideIn 0.5s ease-out forwards;
+        }
+
+        .tournament-title {
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        @media print {
+            .btn-primary, header button, .input-section { display: none !important; }
+            body { background: white !important; }
+            .glass { background: white !important; border: 1px solid #eee !important; backdrop-filter: none !important; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [teams, setTeams] = useState([
+                "ทีมอาสากู้ภัย", "มังกรทอง FC", "สิงห์คะนองนา", "อินทรีเหล็ก Esports", "ฉลามชล Gaming", "พยัคฆ์ร้ายสายน้ำ", "หงส์แดง มหาอุด"
+            ]);
+            const [inputValue, setInputValue] = useState("");
+            const [bracket, setBracket] = useState(null);
+            const [mode, setMode] = useState('input'); // 'input' or 'bracket'
+
+            const generateBracket = () => {
+                if (teams.length < 2) return;
+                const shuffled = [...teams].sort(() => Math.random() - 0.5);
+                const n = shuffled.length;
+                const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(n)));
+                const spots = new Array(nextPowerOfTwo).fill(null);
+                for (let i = 0; i < n; i++) spots[i] = shuffled[i];
+
+                const rounds = [];
+                const r1Matches = [];
+                for (let i = 0; i < nextPowerOfTwo; i += 2) {
+                    const t1 = spots[i];
+                    const t2 = spots[i+1];
+                    let winner = null;
+                    if (t1 && !t2) winner = t1;
+                    else if (!t1 && t2) winner = t2;
+                    r1Matches.push({ id: `r0-m${i/2}`, team1: t1, team2: t2, winner });
+                }
+                rounds.push(r1Matches);
+
+                let matchesInRound = nextPowerOfTwo / 4;
+                let rIdx = 1;
+                while (matchesInRound >= 1) {
+                    const roundMatches = [];
+                    for (let i = 0; i < matchesInRound; i++) {
+                        roundMatches.push({ id: `r${rIdx}-m${i}`, team1: null, team2: null, winner: null });
+                    }
+                    rounds.push(roundMatches);
+                    matchesInRound /= 2;
+                    rIdx++;
+                }
+
+                propagate(rounds);
+                setBracket(rounds);
+                setMode('bracket');
+            };
+
+            const propagate = (currentBracket) => {
+                for (let r = 0; r < currentBracket.length - 1; r++) {
+                    const currentRound = currentBracket[r];
+                    const nextRound = currentBracket[r + 1];
+                    currentRound.forEach((match, mIdx) => {
+                        if (match.winner) {
+                            const nextMatchIdx = Math.floor(mIdx / 2);
+                            const isSlot1 = mIdx % 2 === 0;
+                            if (isSlot1) nextRound[nextMatchIdx].team1 = match.winner;
+                            else nextRound[nextMatchIdx].team2 = match.winner;
+                        }
+                    });
+                }
+            };
+
+            const handleSelectWinner = (rIdx, mIdx, winner) => {
+                if (!winner || !bracket) return;
+                const newBracket = JSON.parse(JSON.stringify(bracket));
+                const currentMatch = newBracket[rIdx][mIdx];
+                if (currentMatch.winner === winner) return;
+                currentMatch.winner = winner;
+                
+                let r = rIdx + 1;
+                let targetMIdx = Math.floor(mIdx / 2);
+                let isSlot1 = mIdx % 2 === 0;
+                let currentWinner = winner;
+
+                while (r < newBracket.length) {
+                    const targetMatch = newBracket[r][targetMIdx];
+                    const oldTeam = isSlot1 ? targetMatch.team1 : targetMatch.team2;
+                    if (isSlot1) targetMatch.team1 = currentWinner;
+                    else targetMatch.team2 = currentWinner;
+                    if (oldTeam !== currentWinner) {
+                        targetMatch.winner = null;
+                    } else break;
+                    isSlot1 = targetMIdx % 2 === 0;
+                    targetMIdx = Math.floor(targetMIdx / 2);
+                    r++;
+                }
+                setBracket(newBracket);
+            };
+
+            const addTeam = () => {
+                if (inputValue.trim() && teams.length < 32) {
+                    setTeams([...teams, inputValue.trim()]);
+                    setInputValue("");
+                }
+            };
+
+            const removeTeam = (index) => setTeams(teams.filter((_, i) => i !== index));
+
+            return (
+                <div className="min-h-screen flex flex-col pb-20">
+                    <header className="sticky top-0 z-50 glass border-b border-border px-8 py-4 mb-12">
+                        <div className="max-w-[1600px] mx-auto flex justify-between items-center">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-white rounded-xl border-2 border-[oklch(68%_0.23_145)] flex items-center justify-center font-black text-[oklch(68%_0.23_145)] text-xl">ISA</div>
+                                <div>
+                                    <h1 className="text-2xl font-black tracking-tight leading-none mb-1">ISA <span className="text-[oklch(68%_0.23_145)]">ESPORT</span></h1>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Islamsriayuttha Foundation School</p>
+                                </div>
+                            </div>
+                            {mode === 'bracket' && (
+                                <button onClick={() => setMode('input')} className="px-6 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                                    แก้ไขรายชื่อทีม
+                                </button>
+                            )}
+                        </div>
+                    </header>
+
+                    <main className="px-8 flex-1 max-w-[1600px] mx-auto w-full">
+                        {mode === 'input' ? (
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 animate-slide-in">
+                                <div className="lg:col-span-5 space-y-8">
+                                    <div className="glass p-8 rounded-3xl shadow-2xl">
+                                        <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
+                                            <span className="w-2 h-8 bg-[oklch(68%_0.23_145)] rounded-full"></span>
+                                            จัดการรายชื่อทีม
+                                        </h2>
+                                        <div className="flex gap-3 mb-8">
+                                            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addTeam()} placeholder="ชื่อทีม..." className="flex-1 px-5 py-4 rounded-2xl border-2 border-border focus:border-[oklch(68%_0.23_145)] focus:outline-none transition-all font-bold text-lg" />
+                                            <button onClick={addTeam} className="btn-primary px-8 rounded-2xl font-black text-lg">เพิ่ม</button>
+                                        </div>
+                                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                            {teams.map((team, i) => (
+                                                <div key={i} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-border group hover:border-[oklch(68%_0.23_145)] shadow

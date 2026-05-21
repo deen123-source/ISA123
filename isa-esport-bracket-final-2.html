@@ -1,0 +1,366 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISA Esport Tournament Bracket</title>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Kanit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Kanit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      oklch(99% 0.005 145);
+            --surface: oklch(100% 0 0);
+            --fg:      oklch(15% 0.02 145);
+            --muted:   oklch(55% 0.02 145);
+            --border:  oklch(90% 0.02 145);
+            --accent:  oklch(68% 0.23 145); /* Vibrant ISA Green */
+            
+            --font-display: 'Inter', 'Kanit', sans-serif;
+            --font-body:    'Inter', 'Kanit', sans-serif;
+            --font-mono:    'JetBrains Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: var(--font-body);
+            background-image: 
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-attachment: fixed;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .match-card {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            width: 240px;
+            position: relative;
+            z-index: 10;
+            box-shadow: 0 4px 0 var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .match-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .team-slot {
+            padding: 10px 14px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+        }
+
+        .team-slot:last-child { border-bottom: none; }
+
+        .team-slot.winner {
+            background-color: var(--accent);
+            color: white;
+            font-weight: 700;
+        }
+
+        .team-slot.loser {
+            opacity: 0.4;
+            background-color: var(--bg);
+        }
+
+        .team-slot.empty {
+            color: var(--muted);
+            cursor: default;
+            font-style: italic;
+        }
+
+        /* Bracket lines (สายใย) */
+        .connector-group {
+            position: absolute;
+            right: -50px;
+            top: 50%;
+            width: 50px;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .connector-horizontal {
+            position: absolute;
+            height: 2px;
+            background: var(--border);
+            top: 50%;
+            right: -30px;
+            width: 30px;
+        }
+
+        .bracket-link {
+            position: absolute;
+            border-color: var(--border);
+            border-style: solid;
+            width: 25px;
+            right: -25px;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+            border-radius: 6px;
+            font-weight: 700;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 oklch(50% 0.15 145);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            filter: brightness(1.05);
+            transform: translateY(-1px);
+            box-shadow: 0 5px 0 oklch(50% 0.15 145);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 oklch(50% 0.15 145);
+        }
+
+        .btn-secondary {
+            background: white;
+            border: 2px solid var(--border);
+            color: var(--fg);
+            font-weight: 600;
+            border-radius: 6px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [teams, setTeams] = useState(["มังกรทอง FC", "สิงห์คะนองนา", "อินทรีเหล็ก Esports", "หงส์แดง มหาอุด", "ฉลามชล Gaming", "พยัคฆ์ร้ายสายน้ำ"]);
+            const [input, setInput] = useState("");
+            const [bracket, setBracket] = useState(null);
+            const [mode, setMode] = useState('input');
+
+            const startTournament = () => {
+                if (teams.length < 2) return;
+                
+                // Shuffle teams
+                const shuffled = [...teams].sort(() => Math.random() - 0.5);
+                const size = Math.pow(2, Math.ceil(Math.log2(shuffled.length)));
+                const slots = new Array(size).fill(null);
+                shuffled.forEach((t, i) => slots[i] = t);
+
+                const rounds = [];
+                // Round 1
+                const r1 = [];
+                for (let i = 0; i < size; i += 2) {
+                    let t1 = slots[i], t2 = slots[i+1];
+                    let win = (t1 && !t2) ? t1 : (t2 && !t1) ? t2 : null;
+                    r1.push({ t1, t2, win });
+                }
+                rounds.push(r1);
+
+                // Future rounds
+                let nextCount = size / 4;
+                while (nextCount >= 1) {
+                    let rd = [];
+                    for (let i = 0; i < nextCount; i++) rd.push({ t1: null, t2: null, win: null });
+                    rounds.push(rd);
+                    nextCount /= 2;
+                }
+
+                // Propagate initial byes
+                propagate(rounds);
+                setBracket(rounds);
+                setMode('bracket');
+            };
+
+            const propagate = (b) => {
+                for (let r = 0; r < b.length - 1; r++) {
+                    b[r].forEach((m, i) => {
+                        if (m.win) {
+                            let next = b[r+1][Math.floor(i/2)];
+                            if (i % 2 === 0) next.t1 = m.win; else next.t2 = m.win;
+                        }
+                    });
+                }
+            };
+
+            const pickWinner = (rIdx, mIdx, team) => {
+                if (!team || !bracket) return;
+                const newB = JSON.parse(JSON.stringify(bracket));
+                newB[rIdx][mIdx].win = team;
+
+                let r = rIdx + 1;
+                let m = Math.floor(mIdx/2);
+                let isT1 = (mIdx % 2 === 0);
+                let currentVal = team;
+
+                while (r < newB.length) {
+                    let target = newB[r][m];
+                    let old = isT1 ? target.t1 : target.t2;
+                    if (isT1) target.t1 = currentVal; else target.t2 = currentVal;
+                    
+                    if (old !== currentVal) {
+                        target.win = null; // Reset winner if opponent changed
+                    } else break; // No more changes needed downstream
+
+                    isT1 = (m % 2 === 0);
+                    m = Math.floor(m/2);
+                    r++;
+                }
+                setBracket(newB);
+            };
+
+            const addTeam = () => {
+                if (input.trim()) {
+                    setTeams([...teams, input.trim()]);
+                    setInput("");
+                }
+            };
+
+            const removeTeam = (i) => setTeams(teams.filter((_, idx) => idx !== i));
+
+            return (
+                <div className="min-h-screen flex flex-col items-center py-10 px-6">
+                    {/* Header with Logo */}
+                    <header className="flex flex-col items-center mb-12 text-center animate-fade">
+                        <img src="mpfjeqwm-image.png" alt="ISA Logo" className="h-28 w-auto mb-4 drop-shadow-lg" />
+                        <h1 className="text-5xl font-black tracking-tighter text-slate-900 uppercase">
+                            ISA <span className="text-[oklch(68%_0.23_145)]">ESPORT</span>
+                        </h1>
+                        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-1">
+                            Islamsriayuttha Foundation School Tournament
+                        </p>
+                    </header>
+
+                    {mode === 'input' ? (
+                        <div className="w-full max-w-xl glass p-8 rounded-2xl shadow-xl animate-fade">
+                            <div className="flex items-center justify-between mb-8">
+                                <h2 className="text-2xl font-black flex items-center gap-3">
+                                    <span className="w-2 h-8 bg-[oklch(68%_0.23_145)] rounded-full"></span>
+                                    รายชื่อทีมเข้าร่วม
+                                </h2>
+                                <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-bold text-slate-500 uppercase">
+                                    {teams.length} ทีม
+                                </span>
+                            </div>
+
+                            <div className="flex gap-3 mb-8">
+                                <input 
+                                    className="flex-1 bg-white border-2 border-border p-4 rounded-xl font-bold focus:border-[oklch(68%_0.23_145)] outline-none transition-all text-lg shadow-inner"
+                                    value={input}
+                                    onChange={e => setInput(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && addTeam()}
+                                    placeholder="ระบุชื่อทีม..."
+                                />
+                                <button 
+                                    className="btn-primary px-8 text-lg"
+                                    onClick={addTeam}
+                                >
+                                    เพิ่ม
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 mb-10 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {teams.map((t, i) => (
+                                    <div key={i} className="bg-white border-2 border-border p-4 rounded-xl flex justify-between items-center group shadow-sm hover:border-[oklch(68%_0.23_145)]/40 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-slate-300 font-black text-xl italic">{i+1}</span>
+                                            <span className="font-bold text-slate-800">{t}</span>
+                                        </div>
+                                        <button 
+                                            className="text-slate-300 hover:text-red-500 transition-colors"
+                                            onClick={() => removeTeam(i)}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                                {teams.length === 0 && (
+                                    <div className="text-center py-10 text-slate-400 font-medium italic">
+                                        ยังไม่ได้เพิ่มทีมลงในรายการ
+                                    </div>
+                                )}
+                            </div>
+
+                            <button 
+                                className="w-full btn-primary py-5 rounded-xl text-2xl font-black uppercase disabled:opacity-30 disabled:cursor-not-allowed shadow-xl"
+                                onClick={startTournament}
+                                disabled={teams.length < 2}
+                            >
+                                สร้างตารางการแข่งขัน
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="w-full flex flex-col items-center animate-fade">
+                            <div className="flex justify-between items-center w-full max-w-7xl mb-12 bg-white/50 p-4 rounded-xl border border-border">
+                                <button 
+                                    className="btn-secondary px-6 py-2 flex items-center gap-2 hover:bg-slate-50 transition-colors"
+                                    onClick={() => setMode('input')}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                                    ย้อนกลับ
+                                </button>
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[oklch(68%_0.23_145)] flex items-center gap-3">
+                                    <span className="w-2 h-2 rounded-full bg-[oklch(68%_0.23_145)] animate-pulse"></span>
+                                    กดที่ชื่อทีมเพื่อเลือกผู้ชนะเข้ารอบถัดไป
+                                </div>
+                                <button 
+                                    className="btn-secondary px-6 py-2 hover:bg-slate-50 transition-colors"
+                                    onClick={() => window.print()}
+                                >
+                                    พิมพ์ (Print)
+                                </button>
+                            </div>
+
+                            <div className="overflow-x-auto w-full pb-20 custom-scrollbar">
+                                <div className="flex gap-20 px-10 items-center justify-center min-w-max relative">
+                                    {bracket.map((round, rIdx) => (
+                                        <div key={rIdx} className="flex flex-col justify-around gap-12 h-full relative" style={{ minHeight: '600px' }}>
+                                            <div className="text-center mb-4">
+                                                <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">
+                                                    {rIdx === bracket.length - 1 ? 'Championship' : `Round ${rIdx + 1}`}
+                                                </h3>
+                                            </div>
+                                            {round.map((m, mIdx) => (
+                                                <
